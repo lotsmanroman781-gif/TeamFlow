@@ -1,0 +1,6 @@
+import test from 'node:test';import assert from 'node:assert/strict';import request from 'supertest';import {app} from '../app.js';import {hashPassword,verifyPassword,canManage,canAssignRole} from '../security.js';
+test('password hash verifies only the correct password and is salted',async()=>{const a=await hashPassword('secure-password');const b=await hashPassword('secure-password');assert.notEqual(a,b);assert.equal(await verifyPassword('secure-password',a),true);assert.equal(await verifyPassword('wrong-password',a),false);});
+test('members cannot manage workspace or elevate roles',()=>{assert.equal(canManage('member'),false);assert.equal(canManage('admin'),true);assert.equal(canAssignRole('admin','admin'),false);assert.equal(canAssignRole('owner','owner'),false);assert.equal(canAssignRole('owner','admin'),true);});
+test('anonymous access rejected before database queries',async()=>{await request(app).get('/api/organizations').expect(401);});
+test('cross-origin mutation rejected',async()=>{await request(app).post('/api/auth/register').set('Origin','https://untrusted.example').send({}).expect(403);});
+test('invalid registration rejected before database writes',async()=>{await request(app).post('/api/auth/register').send({email:'invalid',password:'short'}).expect(400);});
