@@ -1,0 +1,34 @@
+import {MongoMemoryServer} from 'mongodb-memory-server';
+const db=await MongoMemoryServer.create({instance:{args:["--nounixsocket"]}});
+import mongoose from 'mongoose';
+import request from 'supertest';
+const {app}=await import('./app.js');
+const {Task,AIPlan}=await import('./models.js');
+import assert from 'node:assert/strict';
+try{
+await mongoose.connect(db.getUri());await Promise.all(Object.values(mongoose.models).map(m=>m.init()));
+const owner=request.agent(app),member=request.agent(app),other=request.agent(app);
+for(const [agent,name]of[[owner,'owner'],[member,'member'],[other,'other']])await agent.post('/api/auth/register').send({name,email:`${name}@example.com`,password:'Strong-password-123'}).expect(201);
+const org=(await owner.post('/api/organizations').send({name:'Test workspace'}).expect(201)).body._id;
+await owner.post(`/api/organizations/${org}/members`).send({email:'member@example.com'}).expect(201);
+const project=(await owner.post(`/api/organizations/${org}/projects`).send({name:'Test project'}).expect(201)).body._id;
+const base=`/api/organizations/${org}/projects/${project}`;
+await other.get(base+'/tasks').expect(404);
+await member.post(`/api/organizations/${org}/projects`).send({name:'Forbidden'}).expect(403);
+const task=(await member.post(base+'/tasks').send({title:'Persist this task'}).expect(201)).body;
+await member.delete(base+'/tasks/'+task._id).expect(403);
+await member.patch(base+'/tasks/'+task._id).send({status:'done'}).expect(200);
+assert.equal((await owner.get(base+'/tasks').expect(200)).body.items[0].status,'done');
+const user=(await owner.get('/api/auth/me')).body.id;
+const plan=await AIPlan.create({organization:org,project,createdBy:user,summary:'Plan',tasks:[{title:'Task A',description:'Details',priority:'high',dueDate:null},{title:'Task B',description:'Details',priority:'low',dueDate:null}],expiresAt:new Date(Date.now()+86400000)});
+const selected={tasks:[{index:0,title:'Edited task A',description:'Details',priority:'high',dueDate:null}]};
+await member.post(base+`/ai/plans/${plan.id}/approve`).send(selected).expect(404);
+await owner.post(base+`/ai/plans/${plan.id}/approve`).send(selected).expect(200);
+await owner.post(base+`/ai/plans/${plan.id}/approve`).send({tasks:[{index:1,title:'Different retry',description:'Details',priority:'low',dueDate:null}]}).expect(200);
+assert.equal(await Task.countDocuments({aiPlan:plan._id}),1);
+assert.equal((await Task.findOne({aiPlan:plan._id})).title,'Edited task A');
+await owner.post('/api/auth/logout').expect(204);await owner.get('/api/organizations').expect(401);
+await owner.post('/api/auth/login').send({email:'owner@example.com',password:'Strong-password-123'}).expect(200);
+assert.equal((await owner.get(base+'/tasks')).body.total,2);
+console.log('PASS: registration, login/logout, persistence, member permissions, tenant isolation, AI approval ownership and retry deduplication');
+}finally{await mongoose.disconnect();await db.stop()}

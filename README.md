@@ -1,3 +1,7 @@
+# TeamFlow 1.1 Deployment Release
+
+Start with **DEPLOYMENT.md** for hosting and **RELEASE_NOTES.md** for updated verification results. The sections below document the original feature implementation; their earlier unverified-database caveats are superseded for the specific integration cases listed in RELEASE_NOTES.md. Real provider inference and public deployment remain unverified.
+
 # TeamFlow
 
 A MERN project management application built to demonstrate backend engineering: secure server-side sessions, tenant isolation, role-based permissions, indexed MongoDB models, request validation, pagination, and audit activity.

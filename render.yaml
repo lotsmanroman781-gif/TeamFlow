@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: teamflow
+    runtime: node
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22
+      - key: TRUST_PROXY_HOPS
+        value: 1
+      - key: MONGODB_URI
+        sync: false
